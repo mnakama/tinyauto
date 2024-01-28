@@ -15,6 +15,4 @@ https://www.phind.com/search?cache=jm4tvxlbxu07xszk5d7vk3v1
 
 ## Bugs
 
-As generated, I found one single bug. I'm keeping it here, but I'll fix it in the next commit. Can you find it?
-
-Hint: You may need to read the documentation of the paho-mqtt client library.
+The AI bug is fixed. See this commit's message for more details, or check out the previous commit and see if you can find it yourself.

@@ -3,7 +3,7 @@
 #include <string.h>
 #include "MQTTClient.h"
 
-void messageArrived(void *context, char *topicName, int topicLen, MQTTClient_message *message) {
+int messageArrived(void *context, char *topicName, int topicLen, MQTTClient_message *message) {
     int i;
     char* payloadptr;
 
@@ -19,6 +19,8 @@ void messageArrived(void *context, char *topicName, int topicLen, MQTTClient_mes
 
     MQTTClient_freeMessage(&message);
     MQTTClient_free(topicName);
+
+	return 1;
 }
 
 int main(int argc, char* argv[]) {
