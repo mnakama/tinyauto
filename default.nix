@@ -3,5 +3,6 @@ stdenv.mkDerivation {
   name = "tinyauto";
   buildInputs = [
     paho-mqtt-c
+    libbsd
   ];
 }

@@ -1,7 +1,7 @@
 SOURCE = tinyauto.c
 BIN_NAME = tinyauto
 CC = gcc
-CFLAGS = -Wall -Wextra -lpaho-mqtt3c
+CFLAGS = -Wall -Wextra -lpaho-mqtt3c -lbsd
 
 $(BIN_NAME) : $(SOURCE)
 	$(CC) -o $(BIN_NAME) $(SOURCE) $(CFLAGS)
