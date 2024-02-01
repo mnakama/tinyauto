@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -6,6 +7,17 @@
 #include <MQTTClient.h>
 
 MQTTClient client;
+
+const char LivingRoomSwitchDoorSide[] = "zigbee2mqtt/Living room switch - door side";
+const char LivingRoomSwitchBedroomSide[] = "zigbee2mqtt/Living room switch - bedroom side";
+const char BedroomSwitch[] = "zigbee2mqtt/Bedroom switch";
+const char KitchenHallSwitch[] = "zigbee2mqtt/Kitchen Hall switch";
+const char KitchenStoveSwitch[] = "zigbee2mqtt/Kitchen Stove switch";
+
+const char ActionSingle[] = "\"action\":\"single\"";
+const char ActionDouble[] = "\"action\":\"double\"";
+const char ActionHold[] = "\"action\":\"hold\"";
+//const char ActionRelease[] = "\"action\":\"release\"";
 
 void sendMessage(const char *topicName, char* message) {
 	MQTTClient_message pubmsg = MQTTClient_message_initializer;
@@ -38,16 +50,29 @@ int messageArrived(__attribute__((unused)) void *context,
     }
     putchar('\n');
 
-	char topic[] = "zigbee2mqtt/Living room lights/set";
+	char *topic = NULL;
+	if (strcmp(topicName, LivingRoomSwitchDoorSide) == 0 || strcmp(topicName, LivingRoomSwitchBedroomSide) == 0) {
+		topic = "zigbee2mqtt/Living room lights/set";
+	} else if (strcmp(topicName, BedroomSwitch) == 0) {
+		topic = "zigbee2mqtt/Bedroom lights/set";
+	} else if (strcmp(topicName, KitchenHallSwitch) == 0) {
+		topic = "zigbee2mqtt/Kitchen Hall/set";
+	} else if (strcmp(topicName, KitchenStoveSwitch) == 0) {
+		topic = "zigbee2mqtt/Kitchen Stove/set";
+	} else {
+		printf("Unrecognized topic: %s\n", topicName);
+		goto cleanup;
+	}
 
-	if (strnstr(message->payload, "\"action\":\"single\"", message->payloadlen) != NULL) {
+	if (strnstr(message->payload, ActionSingle, message->payloadlen) != NULL) {
 		sendMessage(topic, "{\"state\":\"TOGGLE\"}");
-	} else if (strnstr(message->payload, "\"action\":\"double\"", message->payloadlen) != NULL) {
+	} else if (strnstr(message->payload, ActionDouble, message->payloadlen) != NULL) {
 		sendMessage(topic,  "{\"state\":\"ON\",\"brightness\":\"25\"}");
-	} else if (strnstr(message->payload, "\"action\":\"hold\"", message->payloadlen) != NULL) {
+	} else if (strnstr(message->payload, ActionHold, message->payloadlen) != NULL) {
 		sendMessage(topic, "{\"state\":\"ON\",\"brightness\":\"255\"}");
 	}
 
+ cleanup:
     MQTTClient_freeMessage(&message);
     MQTTClient_free(topicName);
 
@@ -75,8 +100,11 @@ int mconnect() {
         return rc;
     }
 
-	subscribe("zigbee2mqtt/Living room switch - door side");
-	subscribe("zigbee2mqtt/Living room switch - bedroom side");
+	subscribe(LivingRoomSwitchDoorSide);
+	subscribe(LivingRoomSwitchBedroomSide);
+	subscribe(KitchenHallSwitch);
+	subscribe(KitchenStoveSwitch);
+	subscribe(BedroomSwitch);
 
 	return rc;
 }
