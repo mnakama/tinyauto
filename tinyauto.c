@@ -14,10 +14,10 @@ const char BedroomSwitch[] = "zigbee2mqtt/Bedroom switch";
 const char KitchenHallSwitch[] = "zigbee2mqtt/Kitchen Hall switch";
 const char KitchenStoveSwitch[] = "zigbee2mqtt/Kitchen Stove switch";
 
-const char ActionSingle[] = "\"action\":\"single\"";
-const char ActionDouble[] = "\"action\":\"double\"";
-const char ActionHold[] = "\"action\":\"hold\"";
-//const char ActionRelease[] = "\"action\":\"release\"";
+const char ActionSingle[] = R"("action":"single")";
+const char ActionDouble[] = R"("action":"double")";
+const char ActionHold[] = R"("action":"hold")";
+//const char ActionRelease[] = R"("action":"release")";
 
 void sendMessage(const char *topicName, char* message) {
 	MQTTClient_message pubmsg = MQTTClient_message_initializer;
@@ -65,11 +65,11 @@ int messageArrived(__attribute__((unused)) void *context,
 	}
 
 	if (strnstr(message->payload, ActionSingle, message->payloadlen) != NULL) {
-		sendMessage(topic, "{\"state\":\"TOGGLE\"}");
+		sendMessage(topic, R"({"state":"TOGGLE"})");
 	} else if (strnstr(message->payload, ActionDouble, message->payloadlen) != NULL) {
-		sendMessage(topic,  "{\"state\":\"ON\",\"brightness\":\"25\"}");
+		sendMessage(topic,  R"({"state":"ON","brightness":"25"})");
 	} else if (strnstr(message->payload, ActionHold, message->payloadlen) != NULL) {
-		sendMessage(topic, "{\"state\":\"ON\",\"brightness\":\"255\"}");
+		sendMessage(topic, R"({"state":"ON","brightness":"255"})");
 	}
 
  cleanup:
