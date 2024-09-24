@@ -9,14 +9,14 @@
 #include <bsd/string.h>
 #include <MQTTClient.h>
 
-MQTTClient client;
+const char topicPrefix[] = "zigbee2mqtt/";
 
 // light switches
-const char LivingRoomSwitchDoorSide[]    = "zigbee2mqtt/Living room switch - door side";
-const char LivingRoomSwitchBedroomSide[] = "zigbee2mqtt/Living room switch - bedroom side";
-const char BedroomSwitch[]               = "zigbee2mqtt/Bedroom switch";
-const char KitchenHallSwitch[]           = "zigbee2mqtt/Kitchen Hall switch";
-const char KitchenStoveSwitch[]          = "zigbee2mqtt/Kitchen Stove switch";
+const char LivingRoomSwitchDoorSide[]    = "Living room switch - door side";
+const char LivingRoomSwitchBedroomSide[] = "Living room switch - bedroom side";
+const char BedroomSwitch[]               = "Bedroom switch";
+const char KitchenHallSwitch[]           = "Kitchen Hall switch";
+const char KitchenStoveSwitch[]          = "Kitchen Stove switch";
 
 const char ActionSingle[]  = R"("action":"single")";
 const char ActionDouble[]  = R"("action":"double")";
@@ -24,11 +24,11 @@ const char ActionHold[]    = R"("action":"hold")";
 const char ActionRelease[] = R"("action":"release")";
 
 // windows
-const char BedroomWindowLeft[]     = "zigbee2mqtt/Bedroom window left";
-const char BedroomWindowRight[]    = "zigbee2mqtt/Bedroom window right";
-const char KitchenWindowRight[]    = "zigbee2mqtt/Kitchen window right";
-const char LivingRoomWindowLeft[]  = "zigbee2mqtt/Living room window left";
-const char LivingRoomWindowRight[] = "zigbee2mqtt/Living room window right";
+const char BedroomWindowLeft[]     = "Bedroom window left";
+const char BedroomWindowRight[]    = "Bedroom window right";
+const char KitchenWindowRight[]    = "Kitchen window right";
+const char LivingRoomWindowLeft[]  = "Living room window left";
+const char LivingRoomWindowRight[] = "Living room window right";
 
 const char WindowOpen[]   = R"("contact":false)";
 const char WindowClosed[] = R"("contact":true)";
@@ -40,6 +40,7 @@ const short LivingRoomLeft  = 0b01000;
 const short LivingRoomRight = 0b10000;
 const short AllWindows      = 0b11111;
 
+MQTTClient client;
 short WindowState = 0; // all open
 
 void cleanup() {
@@ -89,19 +90,33 @@ void sendMessage(const char *topicName, char* message) {
 	}
 }
 
-void lightSwitchPressed(const char *topic, MQTTClient_message *message) {
+void zigbeeSet(const char *partialTopic, char* message) {
+	const char suffix[] = "/set";
+
+	int totalLen = sizeof(topicPrefix)-1 + sizeof(suffix)-1 + strlen(partialTopic);
+
+	char *topic = alloca(totalLen+1);
+
+	char *dest = stpcpy(topic, topicPrefix);
+	dest = stpcpy(dest, partialTopic);
+	dest = stpcpy(dest, suffix);
+
+	sendMessage(topic, message);
+}
+
+void lightSwitchPressed(const char *target, MQTTClient_message *message) {
 	if (strnstr(message->payload, ActionSingle, message->payloadlen) != NULL) {
-		sendMessage(topic, R"({"state":"TOGGLE"})");
+		zigbeeSet(target, R"({"state":"TOGGLE"})");
 
 	} else if (strnstr(message->payload, ActionDouble, message->payloadlen) != NULL) {
-		sendMessage(topic, R"({"state":"ON","brightness":"25"})");
+		zigbeeSet(target, R"({"state":"ON","brightness":"25"})");
 
 	} else if (strnstr(message->payload, ActionHold, message->payloadlen) != NULL) {
-		//sendMessage(topic, R"({"state":"ON","brightness":"255"})");
-		sendMessage(topic, R"({"brightness_move_onoff":100})");
+		//zigbeeSet(target, R"({"state":"ON","brightness":"255"})");
+		zigbeeSet(target, R"({"brightness_move_onoff":100})");
 
 	} else if (strnstr(message->payload, ActionRelease, message->payloadlen) != NULL) {
-		sendMessage(topic, R"({"brightness_move_onoff":0})");
+		zigbeeSet(target, R"({"brightness_move_onoff":0})");
 	}
 }
 
@@ -124,8 +139,8 @@ void windowStateChanged(int window, MQTTClient_message *message) {
 
 		if (WindowState == AllWindows && savedWindowState != WindowState) {
 			printf("All windows are closed. Turning filters on.\n");
-			sendMessage("zigbee2mqtt/Bedroom air filter/set",     R"({"state":"ON"})");
-			sendMessage("zigbee2mqtt/Living room air filter/set", R"({"state":"ON"})");
+			zigbeeSet("Bedroom air filter",     R"({"state":"ON"})");
+			zigbeeSet("Living room air filter", R"({"state":"ON"})");
 		}
 	} else {
 		// open
@@ -134,8 +149,8 @@ void windowStateChanged(int window, MQTTClient_message *message) {
 
 		if (savedWindowState != WindowState) {
 			printf("Window opened. Turning filters off.\n");
-			sendMessage("zigbee2mqtt/Bedroom air filter/set",     R"({"state":"OFF"})");
-			sendMessage("zigbee2mqtt/Living room air filter/set", R"({"state":"OFF"})");
+			zigbeeSet("Bedroom air filter",     R"({"state":"ON"})");
+			zigbeeSet("Living room air filter", R"({"state":"ON"})");
 		}
 	}
 
@@ -159,45 +174,52 @@ int messageArrived(__attribute__((unused)) void *context,
     }
     putchar('\n');
 
-	char *topic = NULL;
+	if (strncmp(topicName, topicPrefix, 12) != 0) {
+		printf("prefix mismatch. Expected '%s'", topicPrefix);
+		goto messageArrived_cleanup;
+	}
+
+	char* deviceName = topicName + sizeof(topicPrefix)-1;
+
 	// switches
-	if (strcmp(topicName, LivingRoomSwitchDoorSide) == 0 ||
-		strcmp(topicName, LivingRoomSwitchBedroomSide) == 0) {
-		topic = "zigbee2mqtt/Living room lights/set";
-		lightSwitchPressed(topic, message);
-	} else if (strcmp(topicName, BedroomSwitch) == 0) {
-		topic = "zigbee2mqtt/Bedroom lights/set";
-		lightSwitchPressed(topic, message);
-	} else if (strcmp(topicName, KitchenHallSwitch) == 0) {
-		topic = "zigbee2mqtt/Kitchen Hall/set";
-		lightSwitchPressed(topic, message);
-	} else if (strcmp(topicName, KitchenStoveSwitch) == 0) {
-		topic = "zigbee2mqtt/Kitchen Stove/set";
-		lightSwitchPressed(topic, message);
+	if (strcmp(deviceName, LivingRoomSwitchDoorSide) == 0 ||
+		strcmp(deviceName, LivingRoomSwitchBedroomSide) == 0) {
+		lightSwitchPressed("Living room lights", message);
+	} else if (strcmp(deviceName, BedroomSwitch) == 0) {
+		lightSwitchPressed("Bedroom lights", message);
+	} else if (strcmp(deviceName, KitchenHallSwitch) == 0) {
+		lightSwitchPressed("Kitchen Hall", message);
+	} else if (strcmp(deviceName, KitchenStoveSwitch) == 0) {
+		lightSwitchPressed("Kitchen Stove", message);
 
 		// windows
-	} else if (strcmp(topicName, BedroomWindowLeft) == 0) {
+	} else if (strcmp(deviceName, BedroomWindowLeft) == 0) {
 		windowStateChanged(BedroomLeft, message);
-	} else if (strcmp(topicName, BedroomWindowRight) == 0) {
+	} else if (strcmp(deviceName, BedroomWindowRight) == 0) {
 		windowStateChanged(BedroomRight, message);
-	} else if (strcmp(topicName, KitchenWindowRight) == 0) {
+	} else if (strcmp(deviceName, KitchenWindowRight) == 0) {
 		windowStateChanged(KitchenRight, message);
-	} else if (strcmp(topicName, LivingRoomWindowLeft) == 0) {
+	} else if (strcmp(deviceName, LivingRoomWindowLeft) == 0) {
 		windowStateChanged(LivingRoomLeft, message);
-	} else if (strcmp(topicName, LivingRoomWindowRight) == 0) {
+	} else if (strcmp(deviceName, LivingRoomWindowRight) == 0) {
 		windowStateChanged(LivingRoomRight, message);
 
 	} else {
 		printf("Unrecognized topic: %s\n", topicName);
 	}
 
+messageArrived_cleanup:
     MQTTClient_freeMessage(&message);
     MQTTClient_free(topicName);
 
 	return 1;
 }
 
-void subscribe(const char* topic) {
+void subscribe(const char* device) {
+	char* topic = alloca(sizeof(topicPrefix)-1 + strlen(device) + 1);
+	char* dest = stpcpy(topic, topicPrefix);
+	stpcpy(dest, device);
+
     // Subscribe to the topic
 	static const int qos = 1;
 
