@@ -119,20 +119,24 @@ void windowStateChanged(int window, MQTTClient_message *message) {
 
 	if (state == true) {
 		// closed
+		short savedWindowState = WindowState;
 		WindowState |= window;
 
-		if (WindowState == AllWindows) {
+		if (WindowState == AllWindows && savedWindowState != WindowState) {
 			printf("All windows are closed. Turning filters on.\n");
 			sendMessage("zigbee2mqtt/Bedroom air filter/set",     R"({"state":"ON"})");
 			sendMessage("zigbee2mqtt/Living room air filter/set", R"({"state":"ON"})");
 		}
 	} else {
 		// open
+		short savedWindowState = WindowState;
 		WindowState &= ~window;
 
-		printf("Window opened. Turning filters off.\n");
-		sendMessage("zigbee2mqtt/Bedroom air filter/set",     R"({"state":"OFF"})");
-		sendMessage("zigbee2mqtt/Living room air filter/set", R"({"state":"OFF"})");
+		if (savedWindowState != WindowState) {
+			printf("Window opened. Turning filters off.\n");
+			sendMessage("zigbee2mqtt/Bedroom air filter/set",     R"({"state":"OFF"})");
+			sendMessage("zigbee2mqtt/Living room air filter/set", R"({"state":"OFF"})");
+		}
 	}
 
 	printf("WindowState: 0x%x\n", WindowState);
