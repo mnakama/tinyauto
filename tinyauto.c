@@ -8,16 +8,36 @@
 
 MQTTClient client;
 
-const char LivingRoomSwitchDoorSide[] = "zigbee2mqtt/Living room switch - door side";
+// light switches
+const char LivingRoomSwitchDoorSide[]    = "zigbee2mqtt/Living room switch - door side";
 const char LivingRoomSwitchBedroomSide[] = "zigbee2mqtt/Living room switch - bedroom side";
-const char BedroomSwitch[] = "zigbee2mqtt/Bedroom switch";
-const char KitchenHallSwitch[] = "zigbee2mqtt/Kitchen Hall switch";
-const char KitchenStoveSwitch[] = "zigbee2mqtt/Kitchen Stove switch";
+const char BedroomSwitch[]               = "zigbee2mqtt/Bedroom switch";
+const char KitchenHallSwitch[]           = "zigbee2mqtt/Kitchen Hall switch";
+const char KitchenStoveSwitch[]          = "zigbee2mqtt/Kitchen Stove switch";
 
-const char ActionSingle[] = R"("action":"single")";
-const char ActionDouble[] = R"("action":"double")";
-const char ActionHold[] = R"("action":"hold")";
-//const char ActionRelease[] = R"("action":"release")";
+const char ActionSingle[]  = R"("action":"single")";
+const char ActionDouble[]  = R"("action":"double")";
+const char ActionHold[]    = R"("action":"hold")";
+const char ActionRelease[] = R"("action":"release")";
+
+// windows
+const char BedroomWindowLeft[]     = "zigbee2mqtt/Bedroom window left";
+const char BedroomWindowRight[]    = "zigbee2mqtt/Bedroom window right";
+const char KitchenWindowRight[]    = "zigbee2mqtt/Kitchen window right";
+const char LivingRoomWindowLeft[]  = "zigbee2mqtt/Living room window left";
+const char LivingRoomWindowRight[] = "zigbee2mqtt/Living room window right";
+
+const char WindowOpen[]   = R"("contact":false)";
+const char WindowClosed[] = R"("contact":true)";
+
+const short BedroomLeft     = 0b00001;
+const short BedroomRight    = 0b00010;
+const short KitchenRight    = 0b00100;
+const short LivingRoomLeft  = 0b01000;
+const short LivingRoomRight = 0b10000;
+const short AllWindows      = 0b11111;
+
+short WindowState = 0; // all open
 
 void sendMessage(const char *topicName, char* message) {
 	MQTTClient_message pubmsg = MQTTClient_message_initializer;
@@ -31,6 +51,41 @@ void sendMessage(const char *topicName, char* message) {
 	if ((rc = MQTTClient_publishMessage(client, topicName, &pubmsg, NULL)) != MQTTCLIENT_SUCCESS) {
 		printf("Failed to publish message, return code %d\n", rc);
 	}
+}
+
+
+void windowStateChanged(int window, MQTTClient_message *message) {
+	// false is open; true is closed; same as contact field
+	bool state = false;
+	if (strnstr(message->payload, WindowOpen, message->payloadlen) != NULL) {
+		state = false;
+	} else if (strnstr(message->payload, WindowClosed, message->payloadlen) != NULL) {
+		state = true;
+	} else {
+		printf("Unhandled window message: %s\n", (char*)message->payload);
+		return;
+	}
+
+	if (state == true) {
+		// closed
+		WindowState |= window;
+
+		// TODO: save and restore state persistently.
+		if (WindowState == AllWindows) {
+			printf("All windows are closed. Turning filters on.\n");
+			sendMessage("zigbee2mqtt/Bedroom air filter/set",     R"({"state":"ON"})");
+			sendMessage("zigbee2mqtt/Living room air filter/set", R"({"state":"ON"})");
+		}
+	} else {
+		// open
+		WindowState &= ~window;
+
+		printf("Turning filters off.\n");
+		sendMessage("zigbee2mqtt/Bedroom air filter/set",     R"({"state":"OFF"})");
+		sendMessage("zigbee2mqtt/Living room air filter/set", R"({"state":"OFF"})");
+	}
+
+	printf("WindowState: 0x%x\n", WindowState);
 }
 
 int messageArrived(__attribute__((unused)) void *context,
@@ -51,7 +106,9 @@ int messageArrived(__attribute__((unused)) void *context,
     putchar('\n');
 
 	char *topic = NULL;
-	if (strcmp(topicName, LivingRoomSwitchDoorSide) == 0 || strcmp(topicName, LivingRoomSwitchBedroomSide) == 0) {
+	// switches
+	if (strcmp(topicName, LivingRoomSwitchDoorSide) == 0 ||
+		strcmp(topicName, LivingRoomSwitchBedroomSide) == 0) {
 		topic = "zigbee2mqtt/Living room lights/set";
 	} else if (strcmp(topicName, BedroomSwitch) == 0) {
 		topic = "zigbee2mqtt/Bedroom lights/set";
@@ -59,6 +116,24 @@ int messageArrived(__attribute__((unused)) void *context,
 		topic = "zigbee2mqtt/Kitchen Hall/set";
 	} else if (strcmp(topicName, KitchenStoveSwitch) == 0) {
 		topic = "zigbee2mqtt/Kitchen Stove/set";
+
+		// windows
+	} else if (strcmp(topicName, BedroomWindowLeft) == 0) {
+		windowStateChanged(BedroomLeft, message);
+		goto cleanup;
+	} else if (strcmp(topicName, BedroomWindowRight) == 0) {
+		windowStateChanged(BedroomRight, message);
+		goto cleanup;
+	} else if (strcmp(topicName, KitchenWindowRight) == 0) {
+		windowStateChanged(KitchenRight, message);
+		goto cleanup;
+	} else if (strcmp(topicName, LivingRoomWindowLeft) == 0) {
+		windowStateChanged(LivingRoomLeft, message);
+		goto cleanup;
+	} else if (strcmp(topicName, LivingRoomWindowRight) == 0) {
+		windowStateChanged(LivingRoomRight, message);
+		goto cleanup;
+
 	} else {
 		printf("Unrecognized topic: %s\n", topicName);
 		goto cleanup;
@@ -66,10 +141,16 @@ int messageArrived(__attribute__((unused)) void *context,
 
 	if (strnstr(message->payload, ActionSingle, message->payloadlen) != NULL) {
 		sendMessage(topic, R"({"state":"TOGGLE"})");
+
 	} else if (strnstr(message->payload, ActionDouble, message->payloadlen) != NULL) {
-		sendMessage(topic,  R"({"state":"ON","brightness":"25"})");
+		sendMessage(topic, R"({"state":"ON","brightness":"25"})");
+
 	} else if (strnstr(message->payload, ActionHold, message->payloadlen) != NULL) {
-		sendMessage(topic, R"({"state":"ON","brightness":"255"})");
+		//sendMessage(topic, R"({"state":"ON","brightness":"255"})");
+		sendMessage(topic, R"({"brightness_move_onoff":100})");
+
+	} else if (strnstr(message->payload, ActionRelease, message->payloadlen) != NULL) {
+		sendMessage(topic, R"({"brightness_move_onoff":0})");
 	}
 
  cleanup:
@@ -100,11 +181,19 @@ int mconnect() {
         return rc;
     }
 
+	// switches
 	subscribe(LivingRoomSwitchDoorSide);
 	subscribe(LivingRoomSwitchBedroomSide);
 	subscribe(KitchenHallSwitch);
 	subscribe(KitchenStoveSwitch);
 	subscribe(BedroomSwitch);
+
+	// windows
+	subscribe(BedroomWindowLeft);
+	subscribe(BedroomWindowRight);
+	subscribe(KitchenWindowRight);
+	subscribe(LivingRoomWindowLeft);
+	subscribe(LivingRoomWindowRight);
 
 	return rc;
 }
