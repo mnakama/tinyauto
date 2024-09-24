@@ -1,3 +1,6 @@
+#include <err.h>
+#include <fcntl.h> // open
+#include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -39,6 +42,39 @@ const short AllWindows      = 0b11111;
 
 short WindowState = 0; // all open
 
+void cleanup() {
+	int fh = creat("window_state", 0664);
+	if (fh < 0) {
+		err(EXIT_FAILURE, "could not open 'window_state'");
+	}
+
+	size_t ret = write(fh, &WindowState, sizeof(WindowState));
+	if (ret < sizeof(WindowState)) {
+		err(EXIT_FAILURE, "could not write to 'window_state'. Bytes written: %lu", ret);
+	}
+
+	if (close(fh) < 0) {
+		err(EXIT_FAILURE, "could not close 'window_state'");
+	}
+
+	exit(0);
+}
+
+void signalHandler(int signum) {
+	switch (signum) {
+	case SIGINT:
+		printf("Received SIGINT. Exitting.\n");
+		cleanup();
+		break;
+	case SIGTERM:
+		printf("Received SIGTERM. Exitting.\n");
+		cleanup();
+		break;
+	default:
+		printf("Unhandled signal: %d\n", signum);
+	}
+}
+
 void sendMessage(const char *topicName, char* message) {
 	MQTTClient_message pubmsg = MQTTClient_message_initializer;
 	pubmsg.qos = 1;
@@ -53,6 +89,21 @@ void sendMessage(const char *topicName, char* message) {
 	}
 }
 
+void lightSwitchPressed(const char *topic, MQTTClient_message *message) {
+	if (strnstr(message->payload, ActionSingle, message->payloadlen) != NULL) {
+		sendMessage(topic, R"({"state":"TOGGLE"})");
+
+	} else if (strnstr(message->payload, ActionDouble, message->payloadlen) != NULL) {
+		sendMessage(topic, R"({"state":"ON","brightness":"25"})");
+
+	} else if (strnstr(message->payload, ActionHold, message->payloadlen) != NULL) {
+		//sendMessage(topic, R"({"state":"ON","brightness":"255"})");
+		sendMessage(topic, R"({"brightness_move_onoff":100})");
+
+	} else if (strnstr(message->payload, ActionRelease, message->payloadlen) != NULL) {
+		sendMessage(topic, R"({"brightness_move_onoff":0})");
+	}
+}
 
 void windowStateChanged(int window, MQTTClient_message *message) {
 	// false is open; true is closed; same as contact field
@@ -70,7 +121,6 @@ void windowStateChanged(int window, MQTTClient_message *message) {
 		// closed
 		WindowState |= window;
 
-		// TODO: save and restore state persistently.
 		if (WindowState == AllWindows) {
 			printf("All windows are closed. Turning filters on.\n");
 			sendMessage("zigbee2mqtt/Bedroom air filter/set",     R"({"state":"ON"})");
@@ -80,7 +130,7 @@ void windowStateChanged(int window, MQTTClient_message *message) {
 		// open
 		WindowState &= ~window;
 
-		printf("Turning filters off.\n");
+		printf("Window opened. Turning filters off.\n");
 		sendMessage("zigbee2mqtt/Bedroom air filter/set",     R"({"state":"OFF"})");
 		sendMessage("zigbee2mqtt/Living room air filter/set", R"({"state":"OFF"})");
 	}
@@ -110,50 +160,33 @@ int messageArrived(__attribute__((unused)) void *context,
 	if (strcmp(topicName, LivingRoomSwitchDoorSide) == 0 ||
 		strcmp(topicName, LivingRoomSwitchBedroomSide) == 0) {
 		topic = "zigbee2mqtt/Living room lights/set";
+		lightSwitchPressed(topic, message);
 	} else if (strcmp(topicName, BedroomSwitch) == 0) {
 		topic = "zigbee2mqtt/Bedroom lights/set";
+		lightSwitchPressed(topic, message);
 	} else if (strcmp(topicName, KitchenHallSwitch) == 0) {
 		topic = "zigbee2mqtt/Kitchen Hall/set";
+		lightSwitchPressed(topic, message);
 	} else if (strcmp(topicName, KitchenStoveSwitch) == 0) {
 		topic = "zigbee2mqtt/Kitchen Stove/set";
+		lightSwitchPressed(topic, message);
 
 		// windows
 	} else if (strcmp(topicName, BedroomWindowLeft) == 0) {
 		windowStateChanged(BedroomLeft, message);
-		goto cleanup;
 	} else if (strcmp(topicName, BedroomWindowRight) == 0) {
 		windowStateChanged(BedroomRight, message);
-		goto cleanup;
 	} else if (strcmp(topicName, KitchenWindowRight) == 0) {
 		windowStateChanged(KitchenRight, message);
-		goto cleanup;
 	} else if (strcmp(topicName, LivingRoomWindowLeft) == 0) {
 		windowStateChanged(LivingRoomLeft, message);
-		goto cleanup;
 	} else if (strcmp(topicName, LivingRoomWindowRight) == 0) {
 		windowStateChanged(LivingRoomRight, message);
-		goto cleanup;
 
 	} else {
 		printf("Unrecognized topic: %s\n", topicName);
-		goto cleanup;
 	}
 
-	if (strnstr(message->payload, ActionSingle, message->payloadlen) != NULL) {
-		sendMessage(topic, R"({"state":"TOGGLE"})");
-
-	} else if (strnstr(message->payload, ActionDouble, message->payloadlen) != NULL) {
-		sendMessage(topic, R"({"state":"ON","brightness":"25"})");
-
-	} else if (strnstr(message->payload, ActionHold, message->payloadlen) != NULL) {
-		//sendMessage(topic, R"({"state":"ON","brightness":"255"})");
-		sendMessage(topic, R"({"brightness_move_onoff":100})");
-
-	} else if (strnstr(message->payload, ActionRelease, message->payloadlen) != NULL) {
-		sendMessage(topic, R"({"brightness_move_onoff":0})");
-	}
-
- cleanup:
     MQTTClient_freeMessage(&message);
     MQTTClient_free(topicName);
 
@@ -198,6 +231,25 @@ int mconnect() {
 	return rc;
 }
 
+void loadWindowState() {
+	int fh = open("window_state", O_RDONLY);
+	if (fh < 0) {
+		warn("could not open 'window_state'");
+		return;
+	}
+
+	size_t ret = read(fh, &WindowState, sizeof(WindowState));
+	if (ret < sizeof(WindowState)) {
+		warn("could not read 'window_state'. Bytes read: %lu", ret);
+	}
+
+	if (close(fh) < 0) {
+		warn("could not close 'window_state'");
+	}
+
+	printf("WindowState: 0x%x\n", WindowState);
+}
+
 int main(/*int argc, char* argv[]*/) {
     int rc;
 
@@ -207,8 +259,13 @@ int main(/*int argc, char* argv[]*/) {
     // Set the callback function to handle incoming messages
     //MQTTClient_setCallbacks(client, NULL, NULL, messageArrived, NULL);
 
+	loadWindowState();
+
 	rc = mconnect();
 	if (rc != MQTTCLIENT_SUCCESS) exit(1);
+
+	signal(SIGINT, signalHandler);
+	signal(SIGTERM, signalHandler);
 
 	while (1) {
 		printf("Waiting for messages...\n");
