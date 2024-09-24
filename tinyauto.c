@@ -149,8 +149,8 @@ void windowStateChanged(int window, MQTTClient_message *message) {
 
 		if (savedWindowState != WindowState) {
 			printf("Window opened. Turning filters off.\n");
-			zigbeeSet("Bedroom air filter",     R"({"state":"ON"})");
-			zigbeeSet("Living room air filter", R"({"state":"ON"})");
+			zigbeeSet("Bedroom air filter",     R"({"state":"OFF"})");
+			zigbeeSet("Living room air filter", R"({"state":"OFF"})");
 		}
 	}
 
