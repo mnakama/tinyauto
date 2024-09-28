@@ -51,7 +51,7 @@ void cleanup() {
 
 	size_t ret = write(fh, &WindowState, sizeof(WindowState));
 	if (ret < sizeof(WindowState)) {
-		err(EXIT_FAILURE, "could not write to 'window_state'. Bytes written: %lu", ret);
+		err(EXIT_FAILURE, "could not write to 'window_state'. Bytes written: %zu", ret);
 	}
 
 	if (close(fh) < 0) {
@@ -266,7 +266,7 @@ void loadWindowState() {
 
 	size_t ret = read(fh, &WindowState, sizeof(WindowState));
 	if (ret < sizeof(WindowState)) {
-		warn("could not read 'window_state'. Bytes read: %lu", ret);
+		warn("could not read 'window_state'. Bytes read: %zu", ret);
 	}
 
 	if (close(fh) < 0) {
@@ -278,6 +278,9 @@ void loadWindowState() {
 
 int main(/*int argc, char* argv[]*/) {
     int rc;
+
+	// set line buffering so we can watch the logs in journald
+	setlinebuf(stdout);
 
     // Create an MQTT client instance
     MQTTClient_create(&client, "tcp://[::1]:1883", "ExampleClientSub", MQTTCLIENT_PERSISTENCE_NONE, NULL);
