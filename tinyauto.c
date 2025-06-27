@@ -13,9 +13,9 @@ const char topicPrefix[] = "zigbee2mqtt/";
 
 // light switches
 const char LivingRoomSwitchDoorSide[]    = "Living room switch - door side";
-const char LivingRoomSwitchBedroomSide[] = "Living room switch - bedroom side";
+const char HallSwitch[]                  = "Hall switch";
 const char BedroomSwitch[]               = "Bedroom switch";
-const char KitchenHallSwitch[]           = "Kitchen Hall switch";
+const char MattsOfficeSwitch[]           = "Matt's Office switch";
 const char KitchenStoveSwitch[]          = "Kitchen Stove switch";
 
 const char ActionSingle[]  = R"("action":"single")";
@@ -183,12 +183,12 @@ int messageArrived(__attribute__((unused)) void *context,
 
 	// switches
 	if (strcmp(deviceName, LivingRoomSwitchDoorSide) == 0 ||
-		strcmp(deviceName, LivingRoomSwitchBedroomSide) == 0) {
-		lightSwitchPressed("Living room lights", message);
+		strcmp(deviceName, HallSwitch) == 0) {
+		lightSwitchPressed("Hall Light", message);
 	} else if (strcmp(deviceName, BedroomSwitch) == 0) {
 		lightSwitchPressed("Bedroom lights", message);
-	} else if (strcmp(deviceName, KitchenHallSwitch) == 0) {
-		lightSwitchPressed("Kitchen Hall", message);
+	} else if (strcmp(deviceName, MattsOfficeSwitch) == 0) {
+		lightSwitchPressed("Matt's Office Light", message);
 	} else if (strcmp(deviceName, KitchenStoveSwitch) == 0) {
 		lightSwitchPressed("Kitchen Stove", message);
 
@@ -242,8 +242,8 @@ int mconnect() {
 
 	// switches
 	subscribe(LivingRoomSwitchDoorSide);
-	subscribe(LivingRoomSwitchBedroomSide);
-	subscribe(KitchenHallSwitch);
+	subscribe(HallSwitch);
+	subscribe(MattsOfficeSwitch);
 	subscribe(KitchenStoveSwitch);
 	subscribe(BedroomSwitch);
 
