@@ -174,7 +174,7 @@ int messageArrived(__attribute__((unused)) void *context,
     }
     putchar('\n');
 
-	if (strncmp(topicName, topicPrefix, 12) != 0) {
+	if (strncmp(topicName, topicPrefix, sizeof(topicPrefix)-1) != 0) {
 		printf("prefix mismatch. Expected '%s'", topicPrefix);
 		goto messageArrived_cleanup;
 	}
