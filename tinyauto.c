@@ -5,11 +5,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h> // for timers
 #include <unistd.h>
 #include <bsd/string.h>
 #include <MQTTClient.h>
 
 const char topicPrefix[] = "zigbee2mqtt/";
+
+// lights
+const char HallLight[] = "Hall Light";
 
 // light switches
 const char LivingRoomSwitchDoorSide[]    = "Living room switch - door side";
@@ -40,8 +44,16 @@ const short LivingRoomLeft  = 0b01000;
 const short LivingRoomRight = 0b10000;
 const short AllWindows      = 0b11111;
 
+// motion
+const char HallMotion[] = "Hall motion";
+
+const char MotionOccupied[] = R"("occupancy":true)";
+
 MQTTClient client;
 short WindowState = 0; // all open
+
+// timers
+timer_t hallLightTimer;
 
 void cleanup() {
 	int fh = creat("window_state", 0664);
@@ -104,12 +116,72 @@ void zigbeeSet(const char *partialTopic, char* message) {
 	sendMessage(topic, message);
 }
 
+void timerHandler(int signum, siginfo_t *info, void *ucontex __attribute__((unused))) {
+	// info->si_value.sival_int is supposed to have the timer, according to sigaction(2) and timer_create, but it's always 0.
+	// info->si_timerid is supposed to be a special kernel id for the timer that won't match timer_create, but it always
+	// matches. Is this specific to arm?
+	printf("Timer expired. Signal: %d. KTimer: %u. Timer: %u\n", signum, info->si_timerid, info->si_value.sival_int);
+
+	timer_t timerID = (timer_t)(long)info->si_timerid;
+	if (timerID == hallLightTimer) {
+		zigbeeSet(HallLight, R"({"state":"OFF"})");
+	}
+}
+
+void initTimerHandler() {
+    struct sigaction sa;
+
+    // Set up the signal handler
+    sa.sa_sigaction = timerHandler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_SIGINFO;
+
+    if (sigaction(SIGALRM, &sa, NULL) == -1) {
+        err(EXIT_FAILURE, "sigaction");
+    }
+}
+
+timer_t createTimer() {
+    timer_t timerID;
+
+    // Create the timer
+    if (timer_create(CLOCK_MONOTONIC, NULL, &timerID) == -1) {
+        err(EXIT_FAILURE, "timer_create");
+    }
+
+	//printf("Timer created: %zu\n", timerID);
+
+    return timerID;
+}
+
+void deleteTimer(timer_t timerID) {
+    // Cleanup
+    timer_delete(timerID);
+}
+
+void startTimer(timer_t timerID, int sec) {
+    struct itimerspec timer_spec;
+
+    // Configure the timer to expire after 2 seconds and then every 2 seconds
+    timer_spec.it_value.tv_sec = sec;  // Initial expiration
+    timer_spec.it_value.tv_nsec = 0;
+    timer_spec.it_interval.tv_sec = 0;  // Subsequent expiration
+    timer_spec.it_interval.tv_nsec = 0;
+
+    // Start the timer
+    if (timer_settime(timerID, 0, &timer_spec, NULL) == -1) {
+        err(EXIT_FAILURE, "timer_settime");
+    }
+
+	printf("Timer started: %zu, %ds\n", (size_t)timerID, sec);
+}
+
 void lightSwitchPressed(const char *target, MQTTClient_message *message) {
 	if (strnstr(message->payload, ActionSingle, message->payloadlen) != NULL) {
 		zigbeeSet(target, R"({"state":"TOGGLE"})");
 
 	} else if (strnstr(message->payload, ActionDouble, message->payloadlen) != NULL) {
-		zigbeeSet(target, R"({"state":"ON","brightness":"25"})");
+		zigbeeSet(target, R"({"state":"ON","brightness":25})");
 
 	} else if (strnstr(message->payload, ActionHold, message->payloadlen) != NULL) {
 		//zigbeeSet(target, R"({"state":"ON","brightness":"255"})");
@@ -117,6 +189,14 @@ void lightSwitchPressed(const char *target, MQTTClient_message *message) {
 
 	} else if (strnstr(message->payload, ActionRelease, message->payloadlen) != NULL) {
 		zigbeeSet(target, R"({"brightness_move_onoff":0})");
+	}
+}
+
+void motionDetected(const char *target, MQTTClient_message *message) {
+	if (strnstr(message->payload, MotionOccupied, message->payloadlen) != NULL) {
+		// on_time doesn't seem to work, so we handle the timer here.
+		zigbeeSet(target, R"({"state":"ON","brightness":254})");
+		startTimer(hallLightTimer, 300); // turn back off after 5 minutes.
 	}
 }
 
@@ -184,7 +264,7 @@ int messageArrived(__attribute__((unused)) void *context,
 	// switches
 	if (strcmp(deviceName, LivingRoomSwitchDoorSide) == 0 ||
 		strcmp(deviceName, HallSwitch) == 0) {
-		lightSwitchPressed("Hall Light", message);
+		lightSwitchPressed(HallLight, message);
 	} else if (strcmp(deviceName, BedroomSwitch) == 0) {
 		lightSwitchPressed("Bedroom lights", message);
 	} else if (strcmp(deviceName, MattsOfficeSwitch) == 0) {
@@ -192,7 +272,7 @@ int messageArrived(__attribute__((unused)) void *context,
 	} else if (strcmp(deviceName, KitchenStoveSwitch) == 0) {
 		lightSwitchPressed("Kitchen Stove", message);
 
-		// windows
+	// windows
 	} else if (strcmp(deviceName, BedroomWindowLeft) == 0) {
 		windowStateChanged(BedroomLeft, message);
 	} else if (strcmp(deviceName, BedroomWindowRight) == 0) {
@@ -204,6 +284,9 @@ int messageArrived(__attribute__((unused)) void *context,
 	} else if (strcmp(deviceName, LivingRoomWindowRight) == 0) {
 		windowStateChanged(LivingRoomRight, message);
 
+	// motion
+	} else if (strcmp(deviceName, HallMotion) == 0) {
+		motionDetected(HallLight, message);
 	} else {
 		printf("Unrecognized topic: %s\n", topicName);
 	}
@@ -254,6 +337,9 @@ int mconnect() {
 	subscribe(LivingRoomWindowLeft);
 	subscribe(LivingRoomWindowRight);
 
+	// motion
+	subscribe(HallMotion);
+
 	return rc;
 }
 
@@ -281,6 +367,9 @@ int main(/*int argc, char* argv[]*/) {
 
 	// set line buffering so we can watch the logs in journald
 	setlinebuf(stdout);
+
+	initTimerHandler();
+	hallLightTimer = createTimer();
 
     // Create an MQTT client instance
     MQTTClient_create(&client, "tcp://[::1]:1883", "ExampleClientSub", MQTTCLIENT_PERSISTENCE_NONE, NULL);
