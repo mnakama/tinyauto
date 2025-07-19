@@ -14,6 +14,7 @@ const char topicPrefix[] = "zigbee2mqtt/";
 
 // lights
 const char HallLight[] = "Hall Light";
+const short HallLightState = 0b00001;
 
 // light switches
 const char LivingRoomSwitchDoorSide[]    = "Living room switch - door side";
@@ -50,6 +51,7 @@ const char HallMotion[] = "Hall motion";
 const char MotionOccupied[] = R"("occupancy":true)";
 
 MQTTClient client;
+short LightState = 0; // all off
 short WindowState = 0; // all open
 
 // timers
@@ -125,6 +127,7 @@ void timerHandler(int signum, siginfo_t *info, void *ucontex __attribute__((unus
 	timer_t timerID = (timer_t)(long)info->si_timerid;
 	if (timerID == hallLightTimer) {
 		zigbeeSet(HallLight, R"({"state":"OFF"})");
+		LightState &= ~HallLightState;
 	}
 }
 
@@ -184,7 +187,6 @@ void lightSwitchPressed(const char *target, MQTTClient_message *message) {
 		zigbeeSet(target, R"({"state":"ON","brightness":25})");
 
 	} else if (strnstr(message->payload, ActionHold, message->payloadlen) != NULL) {
-		//zigbeeSet(target, R"({"state":"ON","brightness":"255"})");
 		zigbeeSet(target, R"({"brightness_move_onoff":100})");
 
 	} else if (strnstr(message->payload, ActionRelease, message->payloadlen) != NULL) {
@@ -194,8 +196,11 @@ void lightSwitchPressed(const char *target, MQTTClient_message *message) {
 
 void motionDetected(const char *target, MQTTClient_message *message) {
 	if (strnstr(message->payload, MotionOccupied, message->payloadlen) != NULL) {
+		if (!(LightState & HallLightState)) { // if the light's currently off.
+			zigbeeSet(target, R"({"state":"ON","brightness":50,"color":{"x":0.606,"y":0.379}})");
+			LightState |= HallLightState;
+		}
 		// on_time doesn't seem to work, so we handle the timer here.
-		zigbeeSet(target, R"({"state":"ON","brightness":254})");
 		startTimer(hallLightTimer, 300); // turn back off after 5 minutes.
 	}
 }
