@@ -1,4 +1,4 @@
-SOURCE = tinyauto.c
+SOURCE = tinyauto.c timer.c
 BIN_NAME = tinyauto
 CC = gcc
 CFLAGS = -Wall -Wextra -lpaho-mqtt3c -lbsd
