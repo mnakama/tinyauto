@@ -22,7 +22,7 @@ const short HallLightState = 0b00001;
 // light switches
 const char LivingRoomSwitchDoorSide[]    = "Living room switch - door side";
 const char HallSwitch[]                  = "Hall switch";
-const char BedroomSwitch[]               = "Bedroom switch";
+const char DiningSwitch[]                = "Dining switch";
 const char MattsOfficeSwitch[]           = "Matt's Office switch";
 const char KitchenStoveSwitch[]          = "Kitchen Stove switch";
 
@@ -212,8 +212,8 @@ int messageArrived(__attribute__((unused)) void *context,
 	if (strcmp(deviceName, LivingRoomSwitchDoorSide) == 0 ||
 		strcmp(deviceName, HallSwitch) == 0) {
 		lightSwitchPressed(HallLight, message);
-	} else if (strcmp(deviceName, BedroomSwitch) == 0) {
-		lightSwitchPressed("Bedroom lights", message);
+	} else if (strcmp(deviceName, DiningSwitch) == 0) {
+		lightSwitchPressed("Dining lights", message);
 	} else if (strcmp(deviceName, MattsOfficeSwitch) == 0) {
 		lightSwitchPressed("Matt's Office Light", message);
 	} else if (strcmp(deviceName, KitchenStoveSwitch) == 0) {
@@ -275,7 +275,7 @@ int mconnect() {
 	subscribe(HallSwitch);
 	subscribe(MattsOfficeSwitch);
 	subscribe(KitchenStoveSwitch);
-	subscribe(BedroomSwitch);
+	subscribe(DiningSwitch);
 
 	// windows
 	subscribe(BedroomWindowLeft);
