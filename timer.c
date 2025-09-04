@@ -8,10 +8,12 @@ void zigbeeSet(const char *partialTopic, char* message);
 
 extern const char HallLight[];
 extern const short HallLightState;
+extern const char AvereyBedroomLights[];
 
 extern short LightState; // all off
 
 extern timer_t hallLightTimer;
+extern timer_t avereyBedroomTimer;
 
 void timerHandler(int signum, siginfo_t *info, void *ucontex __attribute__((unused))) {
 	// info->si_value.sival_int is supposed to have the timer, according to sigaction(2) and timer_create, but it's always 0.
@@ -23,6 +25,9 @@ void timerHandler(int signum, siginfo_t *info, void *ucontex __attribute__((unus
 	if (timerID == hallLightTimer) {
 		zigbeeSet(HallLight, R"({"state":"OFF"})");
 		LightState &= ~HallLightState;
+	} else if (timerID == avereyBedroomTimer) {
+		printf("lights turning off...\n");
+		zigbeeSet(AvereyBedroomLights, R"({"state":"OFF","transition":10})");
 	}
 }
 
@@ -57,12 +62,12 @@ void deleteTimer(timer_t timerID) {
     timer_delete(timerID);
 }
 
-void startTimer(timer_t timerID, int sec) {
+void startTimer(timer_t timerID, int sec, int nsec) {
     struct itimerspec timer_spec;
 
     // Configure the timer to expire after 2 seconds and then every 2 seconds
     timer_spec.it_value.tv_sec = sec;  // Initial expiration
-    timer_spec.it_value.tv_nsec = 0;
+    timer_spec.it_value.tv_nsec = nsec;
     timer_spec.it_interval.tv_sec = 0;  // Subsequent expiration
     timer_spec.it_interval.tv_nsec = 0;
 
@@ -72,4 +77,22 @@ void startTimer(timer_t timerID, int sec) {
     }
 
 	printf("Timer started: %zu, %ds\n", (size_t)timerID, sec);
+}
+
+void stopTimer(timer_t timerID) {
+	startTimer(timerID, 0, 0);
+}
+
+// How many seconds left till timer triggers, or 0 if timer is disabled.
+long getTimerRemaining(timer_t timerID) {
+    struct itimerspec timer_spec;
+
+    // Get the timer
+    if (timer_gettime(timerID, &timer_spec) == -1) {
+        err(EXIT_FAILURE, "timer_gettime");
+    }
+
+	//printf("Time remaining: %zu, %lds\n", (size_t)timerID, timer_spec.it_value.tv_sec);
+
+	return timer_spec.it_value.tv_sec;
 }

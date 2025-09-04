@@ -11,7 +11,9 @@
 
 void initTimerHandler();
 timer_t createTimer();
-void startTimer(timer_t timerID, int sec);
+void startTimer(timer_t timerID, int sec, int nsec);
+void stopTimer(timer_t timerID);
+long getTimerRemaining(timer_t timerID);
 
 const char topicPrefix[] = "zigbee2mqtt/";
 
@@ -19,8 +21,10 @@ const char topicPrefix[] = "zigbee2mqtt/";
 const char HallLight[] = "Hall Light";
 const short HallLightState = 0b00001;
 
+const char AvereyBedroomLights[] = "Averey's Bedroom Lights";
+
 // light switches
-const char LivingRoomSwitchDoorSide[]    = "Living room switch - door side";
+const char AvereyBedroomSwitch[]         = "Averey's Bedroom switch";
 const char HallSwitch[]                  = "Hall switch";
 const char DiningSwitch[]                = "Dining switch";
 const char MattsOfficeSwitch[]           = "Matt's Office switch";
@@ -59,6 +63,7 @@ short WindowState = 0; // all open
 
 // timers
 timer_t hallLightTimer;
+timer_t avereyBedroomTimer;
 
 void cleanup() {
 	int fh = creat("window_state", 0664);
@@ -136,6 +141,29 @@ void lightSwitchPressed(const char *target, MQTTClient_message *message) {
 	}
 }
 
+
+void lightSwitchTimerPressed(const char *target, timer_t timer, MQTTClient_message *message) {
+	if (strnstr(message->payload, ActionSingle, message->payloadlen) != NULL) {
+		zigbeeSet(target, R"({"state":"TOGGLE"})");
+
+	} else if (strnstr(message->payload, ActionDouble, message->payloadlen) != NULL) {
+		long remaining = getTimerRemaining(timer);
+		if (remaining == 0) {
+			zigbeeSet(target, R"({"effect":"okay"})");
+			startTimer(timer, 60*60 /* 1 hour */, 0);
+		} else {
+			stopTimer(timer);
+			zigbeeSet(target, R"({"state":"OFF","transition":10})");
+		}
+
+	} else if (strnstr(message->payload, ActionHold, message->payloadlen) != NULL) {
+		zigbeeSet(target, R"({"brightness_move_onoff":-100})");
+
+	} else if (strnstr(message->payload, ActionRelease, message->payloadlen) != NULL) {
+		zigbeeSet(target, R"({"brightness_move_onoff":0})");
+	}
+}
+
 void motionDetected(const char *target, MQTTClient_message *message) {
 	if (strnstr(message->payload, MotionOccupied, message->payloadlen) != NULL) {
 		if (!(LightState & HallLightState)) { // if the light's currently off.
@@ -143,7 +171,7 @@ void motionDetected(const char *target, MQTTClient_message *message) {
 			LightState |= HallLightState;
 		}
 		// on_time doesn't seem to work, so we handle the timer here.
-		startTimer(hallLightTimer, 300); // turn back off after 5 minutes.
+		startTimer(hallLightTimer, 300, 0); // turn back off after 5 minutes.
 	}
 }
 
@@ -209,9 +237,8 @@ int messageArrived(__attribute__((unused)) void *context,
 	char* deviceName = topicName + sizeof(topicPrefix)-1;
 
 	// switches
-	if (strcmp(deviceName, LivingRoomSwitchDoorSide) == 0 ||
-		strcmp(deviceName, HallSwitch) == 0) {
-		lightSwitchPressed(HallLight, message);
+	if (strcmp(deviceName, AvereyBedroomSwitch) == 0) {
+		lightSwitchTimerPressed(AvereyBedroomLights, avereyBedroomTimer, message);
 	} else if (strcmp(deviceName, DiningSwitch) == 0) {
 		lightSwitchPressed("Dining lights", message);
 	} else if (strcmp(deviceName, MattsOfficeSwitch) == 0) {
@@ -271,7 +298,7 @@ int mconnect() {
     }
 
 	// switches
-	subscribe(LivingRoomSwitchDoorSide);
+	subscribe(AvereyBedroomSwitch);
 	subscribe(HallSwitch);
 	subscribe(MattsOfficeSwitch);
 	subscribe(KitchenStoveSwitch);
@@ -317,6 +344,7 @@ int main(/*int argc, char* argv[]*/) {
 
 	initTimerHandler();
 	hallLightTimer = createTimer();
+	avereyBedroomTimer = createTimer();
 
     // Create an MQTT client instance
     MQTTClient_create(&client, "tcp://[::1]:1883", "ExampleClientSub", MQTTCLIENT_PERSISTENCE_NONE, NULL);
