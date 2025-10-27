@@ -21,7 +21,7 @@ const char topicPrefix[] = "zigbee2mqtt/";
 const char HallLight[] = "Hall Light";
 const short HallLightState = 0b00001;
 
-const char AvereyBedroomLights[] = "Averey's Bedroom Lights";
+const char AvereyBedroomLights[] = "Averey's Bedroom lights";
 
 // light switches
 const char AvereyBedroomSwitch[]         = "Averey's Bedroom switch";
