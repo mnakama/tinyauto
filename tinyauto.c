@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <bsd/string.h>
 #include <MQTTClient.h>
@@ -64,6 +65,28 @@ short WindowState = 0; // all open
 // timers
 timer_t hallLightTimer;
 timer_t avereyBedroomTimer;
+
+bool sunIsUp() {
+	const time_t now = time(NULL);
+	struct tm *now_fields = gmtime(&now);
+
+	printf("Current time: %d:%d UTC\n", now_fields->tm_hour, now_fields->tm_min);
+	int minutes_utc = now_fields->tm_hour * 60 + now_fields->tm_min;
+
+	printf("minutes_utc: %d\n", minutes_utc);
+	const int sunrise_utc = 11*60 + 21;
+	int sunset_utc = 21*60 + 59;
+
+	// adjust so sunrise_utc < minutes_utc < sunset_utc when the sun is up
+	if (sunset_utc < sunrise_utc) sunset_utc += 24*60;
+	if (minutes_utc < sunrise_utc) minutes_utc += 24*60;
+
+	printf("Check: %d < %d < %d\n", sunrise_utc, minutes_utc, sunset_utc);
+	const bool sun_is_up = minutes_utc < sunset_utc;
+
+	printf("sun_is_up: %d\n", sun_is_up);
+	return sun_is_up;
+}
 
 void cleanup() {
 	int fh = creat("window_state", 0664);
@@ -165,6 +188,11 @@ void lightSwitchTimerPressed(const char *target, timer_t timer, MQTTClient_messa
 }
 
 void motionDetected(const char *target, MQTTClient_message *message) {
+	if (sunIsUp()) {
+		printf("Motion detected, but sun is up; motion-activated lighting disabled\n");
+		return;
+	}
+
 	if (strnstr(message->payload, MotionOccupied, message->payloadlen) != NULL) {
 		if (!(LightState & HallLightState)) { // if the light's currently off.
 			zigbeeSet(target, R"({"state":"ON","brightness":50,"color":{"x":0.606,"y":0.379}})");
