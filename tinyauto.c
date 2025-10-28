@@ -188,12 +188,13 @@ void lightSwitchTimerPressed(const char *target, timer_t timer, MQTTClient_messa
 }
 
 void motionDetected(const char *target, MQTTClient_message *message) {
-	if (sunIsUp()) {
-		printf("Motion detected, but sun is up; motion-activated lighting disabled\n");
-		return;
-	}
-
+	// if occupancy is true
 	if (strnstr(message->payload, MotionOccupied, message->payloadlen) != NULL) {
+		if (sunIsUp()) {
+			printf("Motion detected, but sun is up; motion-activated lighting disabled\n");
+			return;
+		}
+
 		if (!(LightState & HallLightState)) { // if the light's currently off.
 			zigbeeSet(target, R"({"state":"ON","brightness":50,"color":{"x":0.606,"y":0.379}})");
 			LightState |= HallLightState;
