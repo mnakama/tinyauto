@@ -38,18 +38,18 @@ const char ActionHold[]    = R"("action":"hold")";
 const char ActionRelease[] = R"("action":"release")";
 
 // windows
-const char BedroomWindowLeft[]     = "Bedroom window left";
-const char BedroomWindowRight[]    = "Bedroom window right";
-const char KitchenWindowRight[]    = "Kitchen window right";
-const char LivingRoomWindowLeft[]  = "Living room window left";
-const char LivingRoomWindowRight[] = "Living room window right";
+const char OfficeWindowLeft[]      = "Office window left";
+const char OfficeWindowRight[]     = "Office window right";
+const char FamilyRoomWindow[]      = "Family room window";
+const char LivingRoomWindowLeft[]  = "Living Room window left";
+const char LivingRoomWindowRight[] = "Living Room window right";
 
 const char WindowOpen[]   = R"("contact":false)";
 const char WindowClosed[] = R"("contact":true)";
 
-const short BedroomLeft     = 0b00001;
-const short BedroomRight    = 0b00010;
-const short KitchenRight    = 0b00100;
+const short OfficeLeft      = 0b00001;
+const short OfficeRight     = 0b00010;
+const short FamilyRoom      = 0b00100;
 const short LivingRoomLeft  = 0b01000;
 const short LivingRoomRight = 0b10000;
 const short AllWindows      = 0b11111;
@@ -224,8 +224,8 @@ void windowStateChanged(int window, MQTTClient_message *message) {
 
 		if (WindowState == AllWindows && savedWindowState != WindowState) {
 			printf("All windows are closed. Turning filters on.\n");
-			zigbeeSet("Bedroom air filter",     R"({"state":"ON"})");
-			zigbeeSet("Living room air filter", R"({"state":"ON"})");
+			zigbeeSet("Matt's Office air filter", R"({"state":"ON"})");
+			zigbeeSet("Family room air filter",   R"({"state":"ON"})");
 		}
 	} else {
 		// open
@@ -234,12 +234,12 @@ void windowStateChanged(int window, MQTTClient_message *message) {
 
 		if (savedWindowState != WindowState) {
 			printf("Window opened. Turning filters off.\n");
-			zigbeeSet("Bedroom air filter",     R"({"state":"OFF"})");
-			zigbeeSet("Living room air filter", R"({"state":"OFF"})");
+			zigbeeSet("Matt's Office air filter", R"({"state":"OFF"})");
+			zigbeeSet("Family room air filter",   R"({"state":"OFF"})");
 		}
 	}
 
-	printf("WindowState: 0x%x\n", WindowState);
+	printf("WindowState: 0x%b\n", WindowState);
 }
 
 int messageArrived(__attribute__((unused)) void *context,
@@ -280,20 +280,20 @@ int messageArrived(__attribute__((unused)) void *context,
 		lightSwitchPressed("Hall Light", message);
 
 	// windows
-	} else if (strcmp(deviceName, BedroomWindowLeft) == 0) {
-		windowStateChanged(BedroomLeft, message);
-	} else if (strcmp(deviceName, BedroomWindowRight) == 0) {
-		windowStateChanged(BedroomRight, message);
-	} else if (strcmp(deviceName, KitchenWindowRight) == 0) {
-		windowStateChanged(KitchenRight, message);
+	} else if (strcmp(deviceName, OfficeWindowLeft) == 0) {
+		windowStateChanged(OfficeLeft, message);
+	} else if (strcmp(deviceName, OfficeWindowRight) == 0) {
+		windowStateChanged(OfficeRight, message);
+	} else if (strcmp(deviceName, FamilyRoomWindow) == 0) {
+		windowStateChanged(FamilyRoom, message);
 	} else if (strcmp(deviceName, LivingRoomWindowLeft) == 0) {
 		windowStateChanged(LivingRoomLeft, message);
 	} else if (strcmp(deviceName, LivingRoomWindowRight) == 0) {
 		windowStateChanged(LivingRoomRight, message);
 
 	// motion
-	} else if (strcmp(deviceName, HallMotion) == 0) {
-		motionDetected(HallLight, message);
+	//} else if (strcmp(deviceName, HallMotion) == 0) {
+	//	motionDetected(HallLight, message);
 	} else {
 		printf("Unrecognized topic: %s\n", topicName);
 	}
@@ -339,9 +339,9 @@ int mconnect() {
 	subscribe(DiningSwitch);
 
 	// windows
-	subscribe(BedroomWindowLeft);
-	subscribe(BedroomWindowRight);
-	subscribe(KitchenWindowRight);
+	subscribe(OfficeWindowLeft);
+	subscribe(OfficeWindowRight);
+	subscribe(FamilyRoomWindow);
 	subscribe(LivingRoomWindowLeft);
 	subscribe(LivingRoomWindowRight);
 
@@ -366,8 +366,9 @@ void loadWindowState() {
 	if (close(fh) < 0) {
 		warn("could not close 'window_state'");
 	}
+	WindowState &= AllWindows;
 
-	printf("WindowState: 0x%x\n", WindowState);
+	printf("WindowState: 0b%b\n", WindowState);
 }
 
 int main(/*int argc, char* argv[]*/) {
