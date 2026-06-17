@@ -27,6 +27,7 @@ const char AvereyBedroomLights[] = "Averey's Bedroom lights";
 // light switches
 const char AvereyBedroomSwitch[]         = "Averey's Bedroom switch";
 const char HallSwitch[]                  = "Hall switch";
+const char AvereyHallSwitch[]            = "Averey Hall switch";
 const char DiningSwitch[]                = "Dining switch";
 const char MattsOfficeSwitch[]           = "Matt's Office switch";
 const char KitchenStoveSwitch[]          = "Kitchen Stove switch";
@@ -274,6 +275,9 @@ int messageArrived(__attribute__((unused)) void *context,
 		lightSwitchPressed("Matt's Office Light", message);
 	} else if (strcmp(deviceName, KitchenStoveSwitch) == 0) {
 		lightSwitchPressed("Kitchen Stove", message);
+	} else if (strcmp(deviceName, HallSwitch) == 0
+			   || strcmp(deviceName, AvereyHallSwitch) == 0) {
+		lightSwitchPressed("Hall Light", message);
 
 	// windows
 	} else if (strcmp(deviceName, BedroomWindowLeft) == 0) {
@@ -329,6 +333,7 @@ int mconnect() {
 	// switches
 	subscribe(AvereyBedroomSwitch);
 	subscribe(HallSwitch);
+	subscribe(AvereyHallSwitch);
 	subscribe(MattsOfficeSwitch);
 	subscribe(KitchenStoveSwitch);
 	subscribe(DiningSwitch);
