@@ -196,7 +196,7 @@ void motionDetected(const char *target, MQTTClient_message *message) {
 		}
 
 		if (!(LightState & HallLightState)) { // if the light's currently off.
-			zigbeeSet(target, R"({"state":"ON","brightness":50,"color":{"x":0.606,"y":0.379}})");
+			zigbeeSet(target, R"({"state":"ON","brightness":26,"color":{"x":0.589,"y":0.329}})");
 			LightState |= HallLightState;
 		}
 		// on_time doesn't seem to work, so we handle the timer here.
